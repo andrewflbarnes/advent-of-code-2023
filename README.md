@@ -6,7 +6,14 @@ Version: 0.11.0
 ## Running solutions
 
 Unless otherwise stated solutions should be run from the root of the project
-with `zig run -O ReleaseFast d<day>/sol.zig` e.g for day 1
+with `./run.sh <day>` e.g for day 1 and day 11
 ```bash
-zig run -O ReleaseFast d01/soln.zig
+./run.sh 01
+./run.sh 11
+```
+
+Additional run options may be passed after the number, e.g. to run with the
+`ReleaseFast` optimisation
+```bash
+./run.sh 11 -O ReleaseFast
 ```
