@@ -14,7 +14,8 @@ fn solve(filename: []const u8) !void {
     const in_stream = buf_reader.reader();
 
     var buffer: [1024]u8 = undefined;
-    var oasis_total: i64 = 0;
+    var oasis_prev: i64 = 0;
+    var oasis_next: i64 = 0;
     while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
         var chunks = std.mem.split(u8, line, " ");
         var readings_buf: [256]i64 = undefined;
@@ -29,6 +30,9 @@ fn solve(filename: []const u8) !void {
         for (0..last_delta) |i| {
             reading_deltas[i] = readings[i + 1] - readings[i];
         }
+        var first_vals = [_]i64{0} ** 64;
+        first_vals[0] = readings[0];
+        first_vals[1] = reading_deltas[0];
         var last_vals = [_]i64{0} ** 64;
         last_vals[0] = readings[readings.len - 1];
         last_vals[1] = reading_deltas[last_delta - 1];
@@ -39,13 +43,17 @@ fn solve(filename: []const u8) !void {
                 reading_deltas[i] = reading_deltas[i + 1] - reading_deltas[i];
             }
             last_vals[last_val_i] = reading_deltas[last_delta - 1];
+            first_vals[last_val_i] = reading_deltas[0];
             reading_deltas[last_delta] = 0;
             last_delta -= 1;
             last_val_i += 1;
         }
         var next: i64 = 0;
         for (0..last_val_i) |lvi| next += last_vals[lvi];
-        oasis_total += next;
+        oasis_next += next;
+        var prev: i64 = first_vals[last_val_i - 1];
+        for (1..last_val_i) |lvi| prev = first_vals[last_val_i - lvi - 1] - prev;
+        oasis_prev += prev;
     }
-    print("OASIS {d}\n", .{oasis_total});
+    print("OASIS {d}..{d}\n", .{ oasis_prev, oasis_next });
 }
