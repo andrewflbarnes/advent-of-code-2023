@@ -1,2 +1,5 @@
 d*/input*
 d*/test*
+/zig-cache
+/zig-out
+./test.*

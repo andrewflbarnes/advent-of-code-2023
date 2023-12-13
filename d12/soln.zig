@@ -31,9 +31,8 @@ fn solve(filename: []const u8) !void {
 
     var arrangements: u64 = 0;
     for (conditions.items, 0..) |c, i| {
-        _ = i;
         const arr = try c.countArrangements();
-        // print("{d} -> {d}\n", .{ i, arr });
+        print("######## {d} -> {d}\n", .{ i, arr });
         arrangements += arr;
     }
     print("{d} in {d} checks\n", .{ arrangements, check_ops });
@@ -49,8 +48,11 @@ const SpringConditions = struct {
     fn from(buf: []u8, alloc: *const std.mem.Allocator) SpringConditions {
         var chunks = std.mem.splitSequence(u8, buf, " ");
         const status_chunk = chunks.next().?;
-        const status = alloc.alloc(u8, status_chunk.len) catch unreachable;
-        @memcpy(status, status_chunk);
+        // include a buffer "." either side for checks
+        const status = alloc.alloc(u8, status_chunk.len + 2) catch unreachable;
+        @memcpy(status[1 .. status_chunk.len + 1], status_chunk);
+        status[0] = '.';
+        status[status.len - 1] = '.';
         const damaged = chunks.next().?;
         const damaged_groups = d: {
             var i: u8 = 1;
@@ -89,74 +91,92 @@ const SpringConditions = struct {
         self.alloc.free(self.status);
     }
     fn countArrangements(self: *const SpringConditions) !u64 {
-        const bit_set = try self.alloc.alloc(bool, self.count_unknown);
-        defer self.alloc.free(bit_set);
-        @memset(bit_set, false);
-        return try self.countArrangementsRec(bit_set, 0);
+        // include a buffer "." either side for checks
+        const mask = try self.alloc.alloc(u8, self.total_damaged + self.damaged.len + 1);
+        defer self.alloc.free(mask);
+        @memset(mask, '#');
+        mask[0] = '.';
+        mask[mask.len - 1] = '.';
+        var placements = try self.alloc.alloc([]const u8, self.damaged.len);
+        defer self.alloc.free(placements);
+        var i: usize = 0;
+        for (self.damaged[0 .. self.damaged.len - 1], 0..) |d, ii| {
+            mask[i + d + 1] = '.';
+            placements[ii] = mask[i .. i + d + 2];
+            i += d + 1;
+        }
+        // print("{s}\n", .{self.status});
+        // print("{s}\n", .{mask});
+        placements[placements.len - 1] = mask[i..mask.len];
+        // for (placements) |p| {
+        //     print("p {s}\n", .{p});
+        // }
+        return self.countPlacements(placements, mask.len, self.status[0..], 0);
+
+        // print("{s} for {any}\n", .{ mask, self.damaged });
+        // print("{s}\n", .{self.status});
+
+        // var tokens = std.mem.tokenize(u8, self.status, ".");
+        // while (tokens.next()) |token| {
+        //     print("{s} ", .{token});
+        // }
+        // print("\n", .{});
+
+        // return 1;
+        // // return try self.countArrangementsRec(bit_set, 0);
     }
-    fn countArrangementsRec(self: *const SpringConditions, bit_set: []bool, next_bit: u8) !u64 {
-        check_ops += 1;
-        const bits_set: u8 = bits_set: {
-            var i: u8 = 0;
-            for (bit_set) |b| {
-                if (b) i += 1;
-            } else break :bits_set i;
-        };
-
-        const unknown_left = self.count_unknown - next_bit;
-        const damaged_left = self.total_damaged - bits_set - self.count_damaged;
-        if (unknown_left < damaged_left) {
-            return 0;
-        }
-
-        if (self.total_damaged < bits_set + self.count_damaged) {
-            return 0;
-        }
-
-        if (self.total_damaged == bits_set + self.count_damaged) {
-            return try self.isValid(bit_set);
-        }
-
-        if (next_bit >= bit_set.len) {
-            return 0;
-        }
-
-        bit_set[next_bit] = true;
-        var arrangements: u64 = try self.countArrangementsRec(bit_set, next_bit + 1);
-
-        bit_set[next_bit] = false;
-        arrangements += try self.countArrangementsRec(bit_set, next_bit + 1);
-
-        return arrangements;
-    }
-
-    fn isValid(self: *const SpringConditions, bit_set: []bool) !u64 {
-        const test_status = try self.alloc.alloc(u8, self.status.len);
-        defer self.alloc.free(test_status);
-        @memcpy(test_status, self.status);
-        var bit_idx: usize = 0;
-        // print("Check validity of {s} -> ", .{test_status});
-        for (test_status, 0..) |t, i| {
-            if (t == '?') {
-                if (bit_set[bit_idx]) {
-                    test_status[i] = '#';
+    fn countPlacements(self: *const SpringConditions, placements: [][]const u8, placement_fit: usize, status: []const u8, blen: u8) u64 {
+        var obuf = self.alloc.alloc(u8, blen) catch unreachable;
+        defer self.alloc.free(obuf);
+        @memset(obuf, ' ');
+        const placement = placements[0];
+        const rest = placements[1..];
+        const placement_tests = status.len - placement_fit + 1;
+        const placement_size = placement.len;
+        var valid_locations: u64 = 0;
+        // print("{s}Checking placements {s} into {s} for {d} positions\n", .{ obuf, placement, status, placement_tests });
+        for (0..placement_tests) |position| {
+            // print("{s} Checking placement {s} into position {d}: {s}\n", .{ obuf, placement, position, status[position .. position + placement_size] });
+            if (position > 0 and status[position] == '#') {
+                // print("{s}  Invalid - spring left behind\n", .{obuf});
+                break;
+            }
+            if (rest.len == 0) {
+                if (std.mem.indexOf(u8, status[position + placement_size ..], "#") != null) {
+                    // print("{s}  Invalid - remaining springs\n", .{obuf});
+                    continue;
+                }
+            }
+            if (self.isValid(placement, status[position .. position + placement_size])) {
+                // print("{s}  Valid\n", .{obuf});
+                if (rest.len == 0) {
+                    // print("{s}   INCREMENT\n", .{obuf});
+                    valid_locations += 1;
                 } else {
-                    test_status[i] = '.';
+                    // note - we need to adjust values, to "reuse" the '.' terminator on the end
+                    valid_locations += self.countPlacements(
+                        rest,
+                        placement_fit - placement_size + 1,
+                        status[position + placement_size - 1 ..],
+                        blen + 3,
+                    );
                 }
-                bit_idx += 1;
+            } else {
+                // print("{s}  Invalid\n", .{obuf});
             }
         }
-        // print("{s}\n", .{test_status});
-        var chunks = std.mem.splitScalar(u8, test_status, '.');
-        var check_index: usize = 0;
-        while (chunks.next()) |chunk| {
-            if (chunk.len > 0 and chunk[0] == '#') {
-                if (chunk.len != self.damaged[check_index]) {
-                    return 0;
-                }
-                check_index += 1;
+        return valid_locations;
+    }
+    fn isValid(self: *const SpringConditions, placement: []const u8, status: []const u8) bool {
+        _ = self;
+        for (placement, 0..) |p, i| {
+            if (p == '#' and status[i] == '.') {
+                return false;
+            }
+            if (p == '.' and status[i] == '#') {
+                return false;
             }
         }
-        return if (check_index == self.damaged.len) 1 else 0;
+        return true;
     }
 };
