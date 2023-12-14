@@ -1,4 +1,4 @@
-pub fn sliceContains(comptime T: type, slice: []T, val: T) bool {
+pub inline fn sliceContains(comptime T: type, slice: []T, val: T) bool {
     for (slice) |s| {
         if (s == val) {
             return true;
@@ -7,7 +7,7 @@ pub fn sliceContains(comptime T: type, slice: []T, val: T) bool {
     return false;
 }
 
-pub fn sliceEqualsAll(comptime T: type, slice: []T, val: T) bool {
+pub inline fn sliceEqualsAll(comptime T: type, slice: []T, val: T) bool {
     for (slice) |s| {
         if (s != val) {
             return false;
@@ -16,7 +16,7 @@ pub fn sliceEqualsAll(comptime T: type, slice: []T, val: T) bool {
     return true;
 }
 
-pub fn rangeContains(comptime T: type, slice: []T, start: T, end: T) u64 {
+pub inline fn rangeContains(comptime T: type, slice: []T, start: T, end: T) u64 {
     var count: u64 = 0;
     for (slice) |s| {
         if (start < s and s < end) {
@@ -24,4 +24,12 @@ pub fn rangeContains(comptime T: type, slice: []T, start: T, end: T) u64 {
         }
     }
     return count;
+}
+
+pub inline fn transpose(comptime T: type, dest: []T, src: []T, width: u64, height: u64) void {
+    for (0..height) |i| {
+        for (0..width) |j| {
+            dest[j * height + i] = src[i * width + j];
+        }
+    }
 }

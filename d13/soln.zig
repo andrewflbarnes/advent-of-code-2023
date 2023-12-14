@@ -1,5 +1,6 @@
 const std = @import("std");
 const print = std.debug.print;
+const utils = @import("../utils.zig");
 
 pub fn main() !void {
     // try solve("d13/testonly");
@@ -48,30 +49,36 @@ fn solve(filename: []const u8) !void {
     }
     try grids.append(try Grid.from(buf[0 .. width * height], width, height, &alloc));
     var symsum: u64 = 0;
+    var smudge_symsum: u64 = 0;
     for (grids.items, 0..) |grid, i| {
-        var sym_count: u8 = 0;
-        if (try grid.findHorizontalSymmetry()) |sym_col| {
-            // print("[{d}] Horizontal symmetry at column {d}\n", .{ i + 1, sym_col });
-            symsum += sym_col;
-            sym_count += 1;
+        _ = i;
+        const sym_col = try grid.findHorizontalSymmetry();
+        if (sym_col) |v| {
+            // print("[{d}] Horizontal symmetry at column {d}\n", .{ i + 1, v });
+            symsum += v;
         }
 
-        if (try grid.findVerticalSymmetry()) |sym_row| {
-            // print("[{d}] Vertical symmetry at row {d}\n", .{ i + 1, sym_row });
-            symsum += sym_row * 100;
-            sym_count += 1;
+        const sym_row = try grid.findVerticalSymmetry();
+        if (sym_row) |v| {
+            // print("[{d}] Vertical symmetry at row {d}\n", .{ i + 1, v });
+            symsum += v * 100;
         }
 
-        if (sym_count == 0) {
-            print("[{d}] NO SYMMETRY!\n", .{i + 1});
+        const smudge_sym = try grid.findSmudgeSymmetry(sym_col, sym_row);
+        if (smudge_sym[0]) |v| {
+            // print("[{d}] Smudge horizontal symmetry at column {d}\n", .{ i + 1, v });
+            smudge_symsum += v;
         }
-
-        if (sym_count == 2) {
-            print("[{d}] DOUBLE SYMMETRY!\n", .{i + 1});
+        if (smudge_sym[1]) |v| {
+            // print("[{d}] Smudge vertical symmetry at row {d}\n", .{ i + 1, v });
+            smudge_symsum += v * 100;
         }
     }
     print("Symmetry sum: {d}\n", .{symsum});
+    print("Symmetry smudge sum: {d}\n", .{smudge_symsum});
 }
+
+const SmudgeResult = struct { ?usize, ?usize };
 
 const Grid = struct {
     width: usize,
@@ -96,15 +103,24 @@ const Grid = struct {
         var data_t = try self.alloc.alloc(u8, self.data.len);
         defer self.alloc.free(data_t);
         // transpose from data to data_t
-        for (0..self.height) |i| {
-            for (0..self.width) |j| {
-                data_t[j * self.height + i] = self.data[i * self.width + j];
-            }
-        }
-        return findDataHorizontalSymmetry(self.alloc, &data_t, self.height);
+        utils.transpose(u8, data_t, self.data, self.width, self.height);
+        return findDataHorizontalSymmetry(&data_t, self.height);
     }
     fn findHorizontalSymmetry(self: *const Grid) !?usize {
-        return findDataHorizontalSymmetry(self.alloc, &self.data, self.width);
+        return findDataHorizontalSymmetry(&self.data, self.width);
+    }
+    fn findSmudgeSymmetry(self: *const Grid, h_sym: ?usize, v_sym: ?usize) !SmudgeResult {
+        var unsmudge = try self.alloc.alloc(u8, self.data.len);
+        defer self.alloc.free(unsmudge);
+        @memcpy(unsmudge, self.data);
+        if (findDataHorizontalSmudgeSymmetry(&unsmudge, self.width, h_sym)) |v| {
+            return .{ v, null };
+        }
+        utils.transpose(u8, unsmudge, self.data, self.width, self.height);
+        if (findDataHorizontalSmudgeSymmetry(&unsmudge, self.height, v_sym)) |v| {
+            return .{ null, v };
+        }
+        unreachable;
     }
     fn dump(self: *const Grid) void {
         for (0..self.height) |j| {
@@ -113,14 +129,33 @@ const Grid = struct {
     }
 };
 
-fn findDataHorizontalSymmetry(alloc: *std.mem.Allocator, data_ptr: *const []u8, width: usize) !?usize {
+fn findDataHorizontalSmudgeSymmetry(unsmudge_ptr: *[]u8, width: usize, exclude: ?usize) ?usize {
+    const unsmudge = unsmudge_ptr.*;
+    for (unsmudge, 0..) |c, i| {
+        unsmudge[i] = if (c == '#') '.' else '#';
+        if (findDataHorizontalSymmetryWithExclusion(unsmudge_ptr, width, exclude)) |v| {
+            return v;
+        }
+        unsmudge[i] = c;
+    }
+    return null;
+}
+
+fn findDataHorizontalSymmetry(data_ptr: *const []u8, width: usize) ?usize {
+    return findDataHorizontalSymmetryWithExclusion(data_ptr, width, null);
+}
+
+fn findDataHorizontalSymmetryWithExclusion(data_ptr: *const []u8, width: usize, exclude: ?usize) ?usize {
     const data = data_ptr.*;
-    const cols = try alloc.alloc(usize, width - 1);
-    defer alloc.free(cols);
-    @memset(cols, 0);
+    var cols = [_]usize{0} ** 128;
     var col_count: usize = 0;
     // check first line for possible symmetry points then recurse
     for (1..width) |i| {
+        if (exclude) |v| {
+            if (v == i) {
+                continue;
+            }
+        }
         var symmetric = hasLineSymmetryAt(data[0..width], i);
 
         // print("{s} {d}\n", .{ if (symmetric) "Success" else "Failed", i });
