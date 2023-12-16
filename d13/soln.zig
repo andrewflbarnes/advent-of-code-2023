@@ -37,7 +37,7 @@ fn solve(filename: []const u8) !void {
 
     while (try in_stream.readUntilDelimiterOrEof(buffer, '\n')) |line| {
         if (line.len == 0) {
-            try grids.append(try Grid.from(buf[0 .. width * height], width, height, &alloc));
+            try grids.append(try Grid.from(buf[0 .. width * height], width, height, alloc));
             width = 0;
             height = 0;
             buffer = buf[0..];
@@ -47,7 +47,7 @@ fn solve(filename: []const u8) !void {
         height += 1;
         buffer = buffer[line.len..];
     }
-    try grids.append(try Grid.from(buf[0 .. width * height], width, height, &alloc));
+    try grids.append(try Grid.from(buf[0 .. width * height], width, height, alloc));
     var symsum: u64 = 0;
     var smudge_symsum: u64 = 0;
     for (grids.items, 0..) |grid, i| {
@@ -84,8 +84,8 @@ const Grid = struct {
     width: usize,
     height: usize,
     data: []u8,
-    alloc: *std.mem.Allocator,
-    fn from(buf: []u8, width: usize, height: usize, alloc: *std.mem.Allocator) !Grid {
+    alloc: std.mem.Allocator,
+    fn from(buf: []u8, width: usize, height: usize, alloc: std.mem.Allocator) !Grid {
         std.debug.assert(width * height == buf.len);
         const data = try alloc.alloc(u8, buf.len);
         @memcpy(data, buf);
