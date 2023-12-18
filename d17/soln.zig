@@ -47,7 +47,7 @@ fn solve(filename: []const u8) !void {
     // try dumpPath(allocator, &map, width, height);
     print("Lowest heat loss: {}\n", .{lhl});
     const lhl_ultra = try findLowestHeatLoss(allocator, &map_ultra, width, 0, start_dirs, width * height - 1, 4, 10);
-    try dumpPath(allocator, &map_ultra, width, height);
+    // try dumpPath(allocator, &map_ultra, width, height);
     print("Lowest heat loss: {}\n", .{lhl_ultra});
 }
 
@@ -103,6 +103,7 @@ fn findLowestHeatLoss(allocator: std.mem.Allocator, map: *std.ArrayList(PointSta
         _ = map.items[0].updateLeastHeat(start_dir, 0, 0);
     }
 
+    var lhl_bound: u64 = 0xFFFFFFFF;
     while (queue.pop()) |n| {
         // dfs so we get an early upper bound?
         // maybe bfs uses less memory?
@@ -133,6 +134,12 @@ fn findLowestHeatLoss(allocator: std.mem.Allocator, map: *std.ArrayList(PointSta
                     next_position = new_pos;
                     var next_status: *PointStatus = &map.items[next_position];
                     dir_heat_loss += next_status.heat_loss;
+                    if (dir_heat_loss > lhl_bound) {
+                        continue :next_dir;
+                    }
+                    if (next_position == finish and dir_heat_loss < lhl_bound) {
+                        lhl_bound = dir_heat_loss;
+                    }
                     // print("Moved {} from {} to check new position {} with hl {}\n", .{ next_dir, n.data.position, new_pos, dir_heat_loss });
                     const updated = next_status.updateLeastHeat(next_dir, dist, dir_heat_loss);
                     // print("{} {} {any}\n", .{ updated, skip_append, next_status });
