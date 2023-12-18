@@ -31,7 +31,7 @@ run() {
         return 2
     fi
 
-    zig run "$solution" --main-pkg-path . $opts
+    time zig run "$solution" --main-pkg-path . $opts
 }
 
 run "$@"
