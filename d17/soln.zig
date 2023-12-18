@@ -39,12 +39,16 @@ fn solve(filename: []const u8) !void {
         height += 1;
     }
 
-    dump(&map, width);
+    // dump(&map, width);
+    var map_ultra = try map.clone();
 
     const start_dirs = std.EnumSet(Direction).initMany(&[_]Direction{ .south, .east });
-    const lhl = try findLowestHeatLoss(allocator, &map, width, 0, start_dirs, width * height - 1, 3);
-    try dumpPath(allocator, &map, width, height);
+    const lhl = try findLowestHeatLoss(allocator, &map, width, 0, start_dirs, width * height - 1, 1, 3);
+    // try dumpPath(allocator, &map, width, height);
     print("Lowest heat loss: {}\n", .{lhl});
+    const lhl_ultra = try findLowestHeatLoss(allocator, &map_ultra, width, 0, start_dirs, width * height - 1, 4, 10);
+    try dumpPath(allocator, &map_ultra, width, height);
+    print("Lowest heat loss: {}\n", .{lhl_ultra});
 }
 
 fn dumpPath(allocator: std.mem.Allocator, map: *std.ArrayList(PointStatus), width: usize, height: usize) !void {
@@ -88,7 +92,7 @@ fn dumpPath(allocator: std.mem.Allocator, map: *std.ArrayList(PointStatus), widt
     print("\n\n", .{});
 }
 
-fn findLowestHeatLoss(allocator: std.mem.Allocator, map: *std.ArrayList(PointStatus), width: usize, start: usize, start_dirs: std.EnumSet(Direction), finish: usize, max_straight: usize) !u64 {
+fn findLowestHeatLoss(allocator: std.mem.Allocator, map: *std.ArrayList(PointStatus), width: usize, start: usize, start_dirs: std.EnumSet(Direction), finish: usize, min_straight: usize, max_straight: usize) !u64 {
     const height = map.items.len / width;
     var queue = Queue{};
     var starts = start_dirs.iterator();
@@ -112,20 +116,24 @@ fn findLowestHeatLoss(allocator: std.mem.Allocator, map: *std.ArrayList(PointSta
             break :next_dirs others;
         };
         var next_dirs_it = next_dirs.iterator();
-        while (next_dirs_it.next()) |next_dir| {
+        next_dir: while (next_dirs_it.next()) |next_dir| {
             var next_position: usize = n.data.position;
             var dir_heat_loss = init_pos.leastHeatFor(next_dir);
-            for (1..max_straight + 1) |dist| {
+            for (1..min_straight) |_| {
+                if (next_dir.moveFrom(next_position, width, height)) |new_pos| {
+                    next_position = new_pos;
+                    var next_status: *PointStatus = &map.items[next_position];
+                    dir_heat_loss += next_status.heat_loss;
+                } else {
+                    continue :next_dir;
+                }
+            }
+            for (min_straight..max_straight + 1) |dist| {
                 if (next_dir.moveFrom(next_position, width, height)) |new_pos| {
                     next_position = new_pos;
                     var next_status: *PointStatus = &map.items[next_position];
                     dir_heat_loss += next_status.heat_loss;
                     // print("Moved {} from {} to check new position {} with hl {}\n", .{ next_dir, n.data.position, new_pos, dir_heat_loss });
-                    const skip_append = switch (next_dir) {
-                        .north, .south => next_status.least_heat_ns != null,
-                        .east, .west => next_status.least_heat_ew != null,
-                    };
-                    _ = skip_append;
                     const updated = next_status.updateLeastHeat(next_dir, dist, dir_heat_loss);
                     // print("{} {} {any}\n", .{ updated, skip_append, next_status });
                     if (updated and next_position != finish) {
@@ -136,6 +144,8 @@ fn findLowestHeatLoss(allocator: std.mem.Allocator, map: *std.ArrayList(PointSta
                         next_node.* = .{ .data = .{ .position = next_position, .dir = next_dir } };
                         queue.append(next_node);
                     }
+                } else {
+                    continue :next_dir;
                 }
             }
         }
